@@ -1,0 +1,176 @@
+#VRML_SIM R2025a utf8
+# license: Copyright Cyberbotics Ltd. Licensed for use only with Webots.
+# license url: https://cyberbotics.com/webots_assets_license
+# documentation url: https://webots.cloud/run?url=https://github.com/cyberbotics/webots/blob/released/projects/vehicles/protos/abstract/VehicleWheel.proto
+# keywords: vehicle/wheel
+# Generic model of a vehicle wheel implemented at the Solid-node level.
+# The dimensions of the wheel can be set with the parmameters 'thickness' and 'tireRadius'.
+# The quality of the cylinder approximation can be set with the parameter 'subdivision'.
+# The subdivision and size of the round edges of the tire can be set with the parameters 'curvatureFactor' and 'edgeSubdivision'.
+# The size, shape and position of the rim can be set with the parameters 'rimRadius' 'rimBeamNumber' 'rimBeamWidth' 'rimBeamThickness' 'rimBeamOffset'.
+# Finally the size of the central part of the rim can be set with the parameters 'centralInnerRadius' and 'centralOuterRadius'.
+# This model was sponsored by the [CTI project RO2IVSim](http://transport.epfl.ch/simulator-for-mobile-robots-and-intelligent-vehicles).
+# template language: javascript
+
+PROTO PerseWheel [
+  field SFString   name               "vehicle wheel"
+  field SFFloat    thickness          0.3
+  field SFFloat    tireRadius         0.4
+  field SFInt32    subdivision        36
+  field SFFloat    curvatureFactor    0.35
+  field SFInt32    edgeSubdivision    3
+  field SFFloat    rimRadius          0.28
+  field SFInt32    rimBeamNumber      5
+  field SFFloat    rimBeamWidth       0.1
+  field SFFloat    centralInnerRadius 0.09
+  field SFFloat    centralOuterRadius 0.13
+  field SFFloat    rimBeamThickness   0.2
+  field SFFloat    rimBeamOffset      0.03
+  field SFString   contactMaterial    "default"
+  field SFNode     physics            Physics {}
+  field SFBool     boundingObject     TRUE
+  field SFBool     wheelSide          FALSE                            #TRUE for wheels on the left side of the vehicle, FALSE otherwise.
+]
+{
+  %<
+    import * as wbgeometry from 'wbgeometry.js';
+
+    // parameter checking
+    let subdivision = fields.subdivision.value;
+    if (subdivision > 200)
+      console.info('High value for \'subdivision\'. This can slow down the simulation.');
+    else if (subdivision <= 8) {
+      subdivision = 8;
+      console.error('\'subdivision\' must be greater or equal to 8. Value reset to ' + subdivision + '.');
+    }
+
+    let edgeSubdivision = fields.edgeSubdivision.value;
+    if (edgeSubdivision > 24)
+      console.info('High value for \'edgeSubdivision\'. This can slow down the simulation.');
+    else if (edgeSubdivision < 1) {
+      edgeSubdivision = fields.edgeSubdivision.defaultValue;
+      console.error('\'edgeSubdivision\' must be greater or equal to 1. Value reset to ' + edgeSubdivision + '.');
+    }
+
+    let rimBeamNumber = fields.rimBeamNumber.value;
+    if (rimBeamNumber < 3) {
+      rimBeamNumber = 3;
+      console.error('\'rimBeamNumber\' must be greater or equal to 3. Value reset to ' + rimBeamNumber + '.');
+    }
+
+    let thickness = fields.thickness.value;
+    if (thickness <= 0) {
+      thickness = fields.thickness.defaultValue;
+      console.error('\'thickness\' must be strictly positive. Value reset to ' + thickness + '.');
+    }
+
+    let rimBeamThickness = fields.rimBeamThickness.value;
+    if (rimBeamThickness <= 0) {
+      rimBeamThickness = fields.rimBeamThickness.defaultValue;
+      console.error('\'rimBeamThickness\' must be strictly positive. Value reset to ' + rimBeamThickness + '.');
+    } else if (rimBeamThickness > thickness) {
+      rimBeamThickness = thickness;
+      console.error('\'rimBeamThickness\' must be greater or equal to \'thickness\'. Value reset to ' + thickness + '.');
+    }
+
+    let tireRadius = fields.tireRadius.value;
+    if (tireRadius <= 0) {
+      tireRadius = fields.tireRadius.defaultValue;
+      console.error('\'tireRadius\' must be strictly positive. Value reset to ' + tireRadius + '.');
+    }
+
+    let curvatureFactor = fields.curvatureFactor.value;
+    if (curvatureFactor < 0 || curvatureFactor > 1) {
+      curvatureFactor = fields.curvatureFactor.defaultValue;
+      console.error('\'curvatureFactor\' must be in the interval [0,1]. Value reset to ' + curvatureFactor + '.');
+    }
+
+    let rimRadius = fields.rimRadius.value;
+    if (rimRadius <= 0) {
+      rimRadius = tireRadius * 0.5;
+      console.error('\'rimRadius\' must be strictly positive. Value reset to ' + rimRadius + '.');
+    } else if (rimRadius > (tireRadius - (thickness * 0.5)  * curvatureFactor)) {
+      rimRadius = tireRadius * 0.5;
+      console.error('\'rimRadius\' must be smaller than \'tireRadius\' minus half of the \'thickness\' multiplied by the \'curvatureFactor\. Value reset to ' + rimRadius + '.');
+    }
+
+    let rimBeamWidth = fields.rimBeamWidth.value;
+    if (rimBeamWidth <= 0) {
+      rimBeamWidth = fields.rimBeamWidth.defaultValue;
+      console.error('\'rimBeamWidth\' must be strictly positive. Value reset to ' + rimBeamWidth + '.');
+    } else if (rimBeamWidth >= rimRadius) {
+      rimBeamWidth = fields.rimBeamWidth.defaultValue;
+      console.error('\'rimBeamWidth\' must be smaller than \'rimRadius\'. Value reset to ' + rimBeamWidth + '.');
+    }
+
+    let centralInnerRadius = fields.centralInnerRadius.value;
+    if (centralInnerRadius <= 0) {
+      centralInnerRadius = fields.centralInnerRadius.defaultValue;
+      console.error('\'centralInnerRadius\' must be strictly positive. Value reset to ' + centralInnerRadius + '.');
+    }
+
+    let centralOuterRadius = fields.centralOuterRadius.value;
+    if (centralOuterRadius <= 0) {
+      centralOuterRadius = fields.centralOuterRadius.defaultValue;
+      console.error('\'centralOuterRadius\' must be strictly positive. Value reset to ' + centralOuterRadius + '.');
+    } else if (centralOuterRadius <= centralInnerRadius) {
+      centralOuterRadius = centralInnerRadius;
+      console.error('\'centralOuterRadius\' must be greater than \'centralInnerRadius\'. Value reset to ' + centralOuterRadius + '.');
+    } else if (centralOuterRadius >= rimRadius) {
+      centralOuterRadius = rimRadius;
+      console.error('\'centralOuterRadius\' must be smaller than \'rimRadius\'. Value reset to ' + centralOuterRadius + '.');
+    }
+
+    let rimBeamOffset = fields.rimBeamOffset.value;
+    let maxRimBeamOffset = (thickness - rimBeamThickness) * 0.5;
+    if (rimBeamOffset > maxRimBeamOffset) {
+      rimBeamOffset = maxRimBeamOffset;
+      console.error('\'rimBeamOffset\' must be smaller or equal to \'thickness\' minus \'rimBeamThickness\', divided by two. Value reset to ' + rimBeamOffset + '.');
+    }
+  >%
+  Slot {
+    type "vehicle wheel"
+    endPoint Solid {
+      translation 0 0 0
+      rotation 1 0 0 1.5707
+      children [
+        DEF WHEEL_SHAPE Transform {
+          scale 0.00111 0.00111 0.00111
+          %< if (fields.wheelSide.value) { >%
+            translation 0.071429 0.071429 -0.025
+            rotation 0 0 1 3.141578
+          %< } else { >%
+            rotation 0 0 1 1.5707
+            translation 0.071429 -0.071429 -0.025
+          %< } >%
+          children [
+            Shape {
+              castShadows FALSE
+              appearance PBRAppearance {
+                baseColor 0.05 0.05 0.05
+                roughness 1
+                metalness 0
+              }
+              geometry Mesh {
+                url "../meshes/roda.stl"
+              }
+            }
+          ]
+        }
+      ]
+
+      name IS name
+      model "vehicle wheel"
+      %< if (fields.boundingObject.value) { >%
+        contactMaterial IS contactMaterial
+        boundingObject Cylinder {
+          height %<= thickness >%
+          radius %<= tireRadius >%
+          subdivision %<= subdivision >%
+        }
+        physics IS physics
+      %< } >%
+    }
+  }
+}
+

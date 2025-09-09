@@ -1,0 +1,39 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+
+PROTO ConePlate [
+  field SFString   name            "cone plate"
+  field SFVec3f    translation     0 0 0
+  field SFRotation rotation        0 0 1 0
+  field SFFloat    size            1
+  field SFFloat    thickness       0.01
+  field SFString   contactMaterial "default"
+  field SFNode     physics         NULL
+]
+{
+  %<
+    let size = fields.size.value;
+    let thickness = fields.thickness.value;
+  >%
+  Solid {
+    name IS name
+    physics IS physics
+    translation IS translation
+    rotation IS rotation
+    contactMaterial IS contactMaterial
+
+    children [
+      DEF PLATE_SHAPE Shape {
+        appearance PBRAppearance {
+          baseColor 0.96 0.89 0.258
+          roughness 1
+          metalness 0
+        }
+        geometry Box {
+          size %<= [size, size, thickness] >%
+        }
+      }
+    ]
+    boundingObject USE PLATE_SHAPE
+  }
+}

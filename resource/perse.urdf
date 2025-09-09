@@ -1,0 +1,42 @@
+<?xml version="1.0" ?>
+<robot name="Perse">
+  <webots>
+    <plugin type="perse_driver::PerseDriver" >
+      <updateRate>100</updateRate>
+    </plugin>
+
+    <plugin type="webots_ros2_driver::Ros2IMU">
+      <enabled>true</enabled>
+      <topicName>/perse/sensors/imu</topicName>
+      <alwaysOn>true</alwaysOn>
+      <frameName>imu_link</frameName>
+      <inertialUnitName>inertial unit</inertialUnitName>
+      <gyroName>gyro</gyroName>
+      <accelerometerName>accelerometer</accelerometerName>
+    </plugin>
+
+    <device reference="led" type="LED">
+      <ros>
+        <enabled>false</enabled>
+      </ros>
+    </device>
+
+    <device reference="camera" type="Camera">
+      <ros>
+        <enabled>true</enabled>
+        <alwaysOn>true</alwaysOn>
+      </ros>
+    </device>
+
+    <device reference="RPlidar A2" type="Lidar">
+      <ros>
+        <enabled>true</enabled>
+        <updateRate>5</updateRate>
+        <topicName>/perse/sensors/lidar</topicName>
+        <alwaysOn>true</alwaysOn>
+        <frameName>lidar_link</frameName>
+      </ros>
+    </device>
+
+  </webots>
+</robot>
