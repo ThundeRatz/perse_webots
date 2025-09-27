@@ -44,6 +44,9 @@ void PerseDriver::init(
   auto odometry_variables =
       node->declare_parameter("odometry_variables", rclcpp::PARAMETER_STRING);
 
+  node->declare_parameter("encoder_constant", rclcpp::PARAMETER_DOUBLE);
+  encoder_constant = node->get_parameter("encoder_constant").as_double();
+
   fetch_points(odometry_variables.get<std::string>());
   spawnCones();
 
@@ -137,14 +140,12 @@ void PerseDriver::spawnCones() {
 
     def_string << "CONE" << i;
 
-    node_string << "DEF " << def_string.str()
-                << " ConePlate { name \"plate"
+    node_string << "DEF " << def_string.str() << " ConePlate { name \"plate"
                 << i << "\"\ntranslation " << point.x << " " << point.y
                 << " 0.0 }";
 
-    node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone"
-                << i << "\"\ntranslation " << point.x << " " << point.y
-                << " 0.12 }";
+    node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone" << i
+                << "\"\ntranslation " << point.x << " " << point.y << " 0.12 }";
     wb_supervisor_field_import_mf_node_from_string(root_children_field, -1,
                                                    node_string.str().c_str());
 
@@ -187,16 +188,16 @@ void PerseDriver::step() {
   wbu_driver_set_steering_angle(command_servo_left);
 
   // Encoder
-  double encoder_reading = wbu_car_get_wheel_encoder(WBU_CAR_WHEEL_REAR_LEFT);
+  double encoder_reading =
+      wbu_car_get_wheel_encoder(WBU_CAR_WHEEL_REAR_LEFT) * encoder_constant;
 
   if (std::abs(encoder_reading - last_encoder_reading) >= ENCODER_RESOLUTION) {
     std_msgs::msg::Float64 encoder_msg;
     encoder_msg.data = std::ceil(encoder_reading * (1 / ENCODER_RESOLUTION)) /
                        (1 / ENCODER_RESOLUTION);
     encoder_pub->publish(encoder_msg);
+    last_encoder_reading = encoder_msg.data;
   }
-
-  last_encoder_reading = wbu_car_get_wheel_encoder(WBU_CAR_WHEEL_REAR_LEFT);
 
   // Bumper
   double bumper_reading = wb_touch_sensor_get_value(bumper);
@@ -211,28 +212,26 @@ void PerseDriver::step() {
   wb_led_set(led, this->led_msg.data ? 1 : 0);
 
   // Inductive Sensor (inside 1x1m square around any cone)
-  const double *position = wb_supervisor_node_get_position(inductive_sensor_node);
+  const double *position =
+      wb_supervisor_node_get_position(inductive_sensor_node);
 
   bool inductive_sensor_reading = false;
-  wb_led_set(led, 0);
   for (auto cone_node : coneNodes) {
     const double *cone_position = wb_supervisor_node_get_position(cone_node);
 
-    if (std::abs(position[0] - cone_position[0]) < PLATE_SIZE/2 &&
-        std::abs(position[1] - cone_position[1]) < PLATE_SIZE/2) {
-      wb_led_set(led, 1);
+    if (std::abs(position[0] - cone_position[0]) < PLATE_SIZE / 2 &&
+        std::abs(position[1] - cone_position[1]) < PLATE_SIZE / 2) {
       inductive_sensor_reading = true;
       break;
     }
   }
 
-  if (inductive_sensor_reading != inductive_sensor_msg.data ) {
+  if (inductive_sensor_reading != inductive_sensor_msg.data) {
     inductive_sensor_msg.data = inductive_sensor_reading;
     inductive_sensor_pub->publish(inductive_sensor_msg);
   } else {
     inductive_sensor_msg.data = inductive_sensor_reading;
   }
-
 }
 
 bool PerseDriver::preStep() {

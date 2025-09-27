@@ -64,6 +64,8 @@ private:
   double publish_timestep;
   double last_update;
 
+  double encoder_constant;
+
   WbNodeRef inductive_sensor_node;
   std::vector<Point> points = {{-1, -1}, {1, 1}};
   std::vector<WbNodeRef> coneNodes;
