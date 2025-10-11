@@ -8,6 +8,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
@@ -27,6 +28,7 @@ struct PointParam {
 struct Point {
   double x;
   double y;
+  bool hasCone;
 };
 
 class PerseDriver : public webots_ros2_driver::PluginInterface {
@@ -39,6 +41,7 @@ private:
   bool preStep();
   void spawnCones();
   void fetch_points(const std::string yaml_file_path);
+  void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
 
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void ledCallback(const std_msgs::msg::Bool::SharedPtr msg);
@@ -50,6 +53,9 @@ private:
   WbDeviceTag led;
   std_msgs::msg::Bool led_msg;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr led_subscription;
+
+  WbNodeRef path_group_node_;
+  rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
 
   double last_encoder_reading = 0;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr encoder_pub;

@@ -15,7 +15,7 @@
 #include <webots/vehicle/car.h>
 #include <webots/vehicle/driver.h>
 
-#define ENCODER_RESOLUTION 0.01
+#define ENCODER_RESOLUTION 0.001
 #define PLATE_SIZE 1.0
 #define WHEELBASE 0.257
 
@@ -73,6 +73,19 @@ void PerseDriver::init(
       "/perse/sensors/inductive_sensor", 10);
   inductive_sensor_msg.data = false;
   inductive_sensor_pub->publish(inductive_sensor_msg);
+
+  // Get the container node for the path geometry using the C API
+  path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
+  if (!path_group_node_) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not find DEF 'PATH_GROUP'. Please add a 'DEF "
+                 "PATH_GROUP Group {}' node to your Webots world.");
+  }
+
+  // Subscribe to the path topic
+  path_subscription_ = node->create_subscription<nav_msgs::msg::Path>(
+      "/my_robot/path", 10,
+      std::bind(&PerseDriver::pathCallback, this, std::placeholders::_1));
 }
 
 void PerseDriver::fetch_points(const std::string yaml_file_path) {
@@ -97,9 +110,10 @@ void PerseDriver::fetch_points(const std::string yaml_file_path) {
           // Get the 'x' and 'y' values
           double x = parameters[point_name]["x"].as<double>();
           double y = parameters[point_name]["y"].as<double>();
+          bool hasCone = parameters[point_name]["has_cone"].as<bool>();
 
           // Create a Point object and add it to the vector
-          points.push_back({x, y});
+          points.push_back({x, y, hasCone});
 
           RCLCPP_INFO_STREAM(node->get_logger(),
                              "Read point " << i << ": x=" << x << ", y=" << y);
@@ -140,12 +154,15 @@ void PerseDriver::spawnCones() {
 
     def_string << "CONE" << i;
 
-    node_string << "DEF " << def_string.str() << " ConePlate { name \"plate"
-                << i << "\"\ntranslation " << point.x << " " << point.y
-                << " 0.0 }";
+    if (point.hasCone) {
+      node_string << "DEF " << def_string.str() << " ConePlate { name \"plate"
+                  << i << "\"\ntranslation " << point.x << " " << point.y
+                  << " 0.0 }";
 
-    node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone" << i
-                << "\"\ntranslation " << point.x << " " << point.y << " 0.12 }";
+      node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone"
+                  << i << "\"\ntranslation " << point.x << " " << point.y
+                  << " 0.12 }";
+    }
     wb_supervisor_field_import_mf_node_from_string(root_children_field, -1,
                                                    node_string.str().c_str());
 
@@ -232,6 +249,68 @@ void PerseDriver::step() {
   } else {
     inductive_sensor_msg.data = inductive_sensor_reading;
   }
+}
+
+void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
+  if (!path_group_node_ || msg->poses.empty()) {
+    return;
+  }
+
+  std::string points_str;
+  std::string indices_str;
+
+  for (size_t i = 0; i < msg->poses.size(); ++i) {
+    const auto &pose = msg->poses[i].pose;
+    points_str += std::to_string(pose.position.x) + " " +
+                  std::to_string(pose.position.y) + " " +
+                  std::to_string(pose.position.z);
+    indices_str += std::to_string(i);
+
+    if (i < msg->poses.size() - 1) {
+      points_str += ", ";
+      indices_str += ", ";
+    }
+  }
+
+  // Generate the VRML string for the IndexedLineSet geometry
+  std::string shape_string = "Shape {\n"
+                             "  appearance Appearance {\n"
+                             "    material Material {\n"
+                             "      emissiveColor 1 0 0\n" // Red line
+                             "    }\n"
+                             "  }\n"
+                             "  geometry IndexedLineSet {\n"
+                             "    coord Coordinate {\n"
+                             "      point [\n"
+                             "        " +
+                             points_str +
+                             "\n"
+                             "      ]\n"
+                             "    }\n"
+                             "    coordIndex [\n"
+                             "      " +
+                             indices_str +
+                             "\n"
+                             "    ]\n"
+                             "  }\n"
+                             "}";
+
+  WbFieldRef children_field =
+      wb_supervisor_node_get_field(path_group_node_, "children");
+  if (!children_field) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not get 'children' field of PATH_GROUP.");
+    return;
+  }
+
+  // Clear existing path if one was already drawn
+  wb_supervisor_field_remove_mf(children_field, 0);
+  // if (wb_supervisor_field_get_mf_size(children_field) > 0) {
+  // }
+
+  // Import the new path node
+  wb_supervisor_field_import_mf_node_from_string(children_field, -1,
+                                                 shape_string.c_str());
 }
 
 bool PerseDriver::preStep() {
