@@ -7,7 +7,7 @@ PROTO ConePlate [
   field SFRotation rotation        0 0 1 0
   field SFFloat    size            1
   field SFFloat    thickness       0.01
-  field SFString   contactMaterial "default"
+  field SFString   contactMaterial "ground"
   field SFNode     physics         NULL
 ]
 {

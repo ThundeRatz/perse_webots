@@ -8,12 +8,15 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 import math
 
-def launch_setup(context, *args, **kwargs):
-    odometry_variables = LaunchConfiguration('odometry_variables').perform(context)
 
-    if odometry_variables == '':
-        perse_dir = get_package_share_directory("perse")
-        odometry_variables = os.path.join(perse_dir, "config", "odometry_variables.yaml")
+def launch_setup(context, *args, **kwargs):
+    odometry_variables = LaunchConfiguration("odometry_variables").perform(context)
+
+    if odometry_variables == "":
+        perse_dir = get_package_share_directory("perse_bringup")
+        odometry_variables = os.path.join(
+            perse_dir, "config", "odometry_variables.yaml"
+        )
 
     package_dir = get_package_share_directory("perse_webots")
 
@@ -29,6 +32,7 @@ def launch_setup(context, *args, **kwargs):
                 "encoder_constant": 1 / 14,
             }
         ],
+        respawn=True,
     )
 
     return [
@@ -42,9 +46,10 @@ def launch_setup(context, *args, **kwargs):
         ),
     ]
 
+
 def generate_launch_description():
     declared_arguments = [
-        DeclareLaunchArgument("odometry_variables", default_value=''),
+        DeclareLaunchArgument("odometry_variables", default_value=""),
     ]
     return LaunchDescription(
         declared_arguments + [OpaqueFunction(function=launch_setup)]

@@ -154,11 +154,11 @@ void PerseDriver::spawnCones() {
 
     def_string << "CONE" << i;
 
-    if (point.hasCone) {
-      node_string << "DEF " << def_string.str() << " ConePlate { name \"plate"
-                  << i << "\"\ntranslation " << point.x << " " << point.y
-                  << " 0.0 }";
+    node_string << "DEF " << def_string.str() << " ConePlate { name \"plate"
+                << i << "\"\ntranslation " << point.x << " " << point.y
+                << " 0.0 }";
 
+    if (point.hasCone) {
       node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone"
                   << i << "\"\ntranslation " << point.x << " " << point.y
                   << " 0.12 }";

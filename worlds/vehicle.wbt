@@ -13,19 +13,26 @@ EXTERNPROTO "../protos/PerseWheel.proto"
 EXTERNPROTO "../protos/vehicle/Car.proto"
 
 WorldInfo {
+  ERP 0.6
   contactProperties [
     ContactProperties {
+      material1 "ground"
       material2 "tire"
       coulombFriction 80
       rollingFriction 0.11 0.11 0.11
+      softCFM 1e-5
+    }
+    ContactProperties {
+      material1 "ground"
+      material2 "cone"
+      coulombFriction 1
+      softCFM 1e-5
     }
   ]
 }
 Viewpoint {
-  # orientation -0.33185733874619844 -0.09874274160469809 0.9381474178937331 3.686018050088086
-  # position 1.700313773507203 1.0549607538959629 1.4846240848267684
   orientation 0.595930868482991 0.5850612247951024 -0.5500634174623528 2.151274331136835
-  position 0.19998448779344674 -3.8915247963167756 10.606904210812854
+  position 0.17792282093508532 -5.087823618900117 25.66822320531986
   follow "perse"
 }
 TexturedBackground {
@@ -38,6 +45,7 @@ CircleArena {
   wallThickness 0.05
   floorTileSize 1 1
   floorAppearance Parquetry { type "dark strip" }
+  contactMaterial "ground"
 }
 DEF PATH_GROUP Group {
 }
@@ -58,12 +66,12 @@ Pose {
       wheelbase                      0.257
       minSteeringAngle              -0.8
       maxSteeringAngle               0.8
-      suspensionFrontSpringConstant  20000
-      suspensionFrontDampingConstant 1000
-      suspensionRearSpringConstant   20000
-      suspensionRearDampingConstant  1000
-      wheelsDampingConstant          3
-      maxSteeringTorque              10000
+      suspensionFrontSpringConstant  10000
+      suspensionFrontDampingConstant 5000
+      suspensionRearSpringConstant   10000
+      suspensionRearDampingConstant  5000
+      wheelsDampingConstant          0
+      maxSteeringTorque              100
       extensionSlot                  [
         Gyro {
           name "gyro"
@@ -233,31 +241,30 @@ Pose {
       engineType                     "electric"
       engineSound                    "../protos/vehicle/sounds/engine.wav"
       engineSoundRpmReference        1000
-      brakeCoefficient               100
-      time0To100                     10.0
-      maxVelocity                    10
+      brakeCoefficient               0.5
+      time0To100                     0.1
+      maxVelocity                    5
       engineMaxTorque                50
-      engineMaxPower                 1000
-      engineMaxRPM                   9000
-      engineMinRPM                   1000
+      engineMaxPower                 500
+      engineMaxRPM                   450
+      engineMinRPM                   0
       engineFunctionCoefficients     150 0.1 0
-      gearRatio                      [-5 5]
+      gearRatio                      [-1 1]
       hybridPowerSplitRatio          0.25
       hybridPowerSplitRPM            3000
       window                         "<generic>"
       physics Physics {
-        mass 5
+        mass 10
         inertiaMatrix [
-        0.060921,   # Ixx em kg*m^2
-        0.111164,   # Iyy em kg*m^2
-        0.103591    # Izz em kg*m^2
-        -0.002364,  # Ixy em kg*m^2
-        0.000154,   # Ixz em kg*m^2
-        -0.001326,  # Iyz em kg*m^2
-
+            0.060921,   # Ixx em kg*m^2
+            0.111164,   # Iyy em kg*m^2
+            0.103591    # Izz em kg*m^2
+            -0.002364,  # Ixy em kg*m^2
+            0.000154,   # Ixz em kg*m^2
+            -0.001326,  # Iyz em kg*m^2
         ]
         centerOfMass [
-          0.11804 -0.00908 -0.00349
+          0.1285 0 -0.1
         ]
       }
       wheelFrontRight PerseWheel {
