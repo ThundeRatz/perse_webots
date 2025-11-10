@@ -18,8 +18,8 @@ WorldInfo {
     ContactProperties {
       material1 "ground"
       material2 "tire"
-      coulombFriction 80
-      rollingFriction 0.11 0.11 0.11
+      coulombFriction 60
+      rollingFriction 0.05 0.05 0.2
       softCFM 1e-5
     }
     ContactProperties {
@@ -31,9 +31,11 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.595930868482991 0.5850612247951024 -0.5500634174623528 2.151274331136835
-  position 0.17792282093508532 -5.087823618900117 25.66822320531986
-  follow "perse"
+  # orientation -0.2203490262159566 0.3832465836459308 0.8969773479689453 1.2139926400090937
+  # position -0.5789720639420947 -1.7941957566028734 1.2719528278531393
+  orientation -0.5902381614321913 0.6060170446849258 0.5332562745439525 2.1686841625110818
+  position 3.6214775175017193 -0.11789654959748543 25.58178246184175
+  follow "perse_webots"
 }
 TexturedBackground {
 }
@@ -50,12 +52,12 @@ CircleArena {
 DEF PATH_GROUP Group {
 }
 Pose {
-  translation 0.1285 0.1285 0
+  translation -0.1285 0.1285 0
   children [
     Car {
       translation                    0 0 0
       rotation                       0 0 1 0
-      name                           "perse"
+      name                           "perse_webots"
       model                          "car"
       controller                     "<extern>"
       controllerArgs                 []
@@ -209,8 +211,8 @@ Pose {
         }
         Camera {
           translation 0.31 0 0.18
-          width 300
-          height 300
+          width 416
+          height 416
           recognition Recognition {}
           children [
             Transform {
@@ -241,8 +243,8 @@ Pose {
       engineType                     "electric"
       engineSound                    "../protos/vehicle/sounds/engine.wav"
       engineSoundRpmReference        1000
-      brakeCoefficient               0.5
-      time0To100                     0.1
+      # brakeCoefficient               0.001
+      time0To100                     2
       maxVelocity                    5
       engineMaxTorque                50
       engineMaxPower                 500
@@ -281,7 +283,7 @@ Pose {
         contactMaterial "tire"
         physics DEF WHEEL_PHYSICS Physics {
           density -1
-          mass 0.4
+          mass 0.1
         }
       }
       wheelFrontLeft PerseWheel {

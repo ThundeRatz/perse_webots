@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <functional>
 #include <rclcpp/logging.hpp>
+#include <rclcpp/parameter_value.hpp>
 #include <sstream>
 #include <string>
 #include <webots/gyro.h>
@@ -21,11 +22,72 @@
 
 namespace perse_driver {
 
+void PerseDriver::fetchParameters() {
+  max_forward = node->declare_parameter("properties.limits.speed.forward",
+                                        rclcpp::PARAMETER_DOUBLE)
+                    .get<double>();
+  max_backward = node->declare_parameter("properties.limits.speed.backward",
+                                         rclcpp::PARAMETER_DOUBLE)
+                     .get<double>();
+  max_steer = node->declare_parameter("properties.limits.steer",
+                                      rclcpp::PARAMETER_DOUBLE)
+                  .get<double>();
+
+  encoder_constant =
+      node->declare_parameter("encoder_constant", rclcpp::PARAMETER_DOUBLE)
+          .get<double>();
+
+  auto odometry_variables =
+      node->declare_parameter("odometry_variables", rclcpp::PARAMETER_STRING);
+  fetchPoints(odometry_variables.get<std::string>());
+}
+
+void PerseDriver::setupCallbacks() {
+  cmd_vel_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
+      "/perse/actuator/cmd_vel", rclcpp::SensorDataQoS().reliable(),
+      std::bind(&PerseDriver::cmdVelCallback, this, std::placeholders::_1));
+  led_subscription = node->create_subscription<std_msgs::msg::Bool>(
+      "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
+      std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
+  path_subscription_ = node->create_subscription<nav_msgs::msg::Path>(
+      "/my_robot/path", rclcpp::SensorDataQoS().reliable(),
+      std::bind(&PerseDriver::pathCallback, this, std::placeholders::_1));
+
+  encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
+      "/perse/sensors/encoder_fusion/distance",
+      rclcpp::SensorDataQoS().reliable());
+  bumper_pub = node->create_publisher<std_msgs::msg::Bool>(
+      "/perse/sensors/bumper", rclcpp::SensorDataQoS().reliable());
+  inductive_sensor_pub = node->create_publisher<std_msgs::msg::Bool>(
+      "/perse/sensors/inductive_sensor", rclcpp::SensorDataQoS().reliable());
+
+  encoder_msg.data = 0;
+  encoder_pub->publish(encoder_msg);
+
+  bumper_msg.data = false;
+  bumper_pub->publish(bumper_msg);
+
+  inductive_sensor_msg.data = false;
+  inductive_sensor_pub->publish(inductive_sensor_msg);
+}
+
+void PerseDriver::ledCallback(const std_msgs::msg::Bool::SharedPtr msg) {
+  led_msg.data = msg->data;
+}
+
+void PerseDriver::cmdVelCallback(
+    const geometry_msgs::msg::Twist::SharedPtr msg) {
+  cmd_vel_msg.linear = msg->linear;
+  cmd_vel_msg.angular = msg->angular;
+}
+
 void PerseDriver::init(
 
     webots_ros2_driver::WebotsNode *node,
     std::unordered_map<std::string, std::string> &parameters) {
   this->node = node;
+  fetchParameters();
+  setupCallbacks();
 
   wbu_car_init();
   wbu_driver_init();
@@ -41,40 +103,7 @@ void PerseDriver::init(
   wb_touch_sensor_enable(bumper, publish_timestep * 1000);
 
   inductive_sensor_node = wb_supervisor_node_get_from_def("INDUCTIVE_SENSOR");
-  auto odometry_variables =
-      node->declare_parameter("odometry_variables", rclcpp::PARAMETER_STRING);
 
-  node->declare_parameter("encoder_constant", rclcpp::PARAMETER_DOUBLE);
-  encoder_constant = node->get_parameter("encoder_constant").as_double();
-
-  fetch_points(odometry_variables.get<std::string>());
-  spawnCones();
-
-  cmd_vel_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
-      "/perse/actuator/cmd_vel", rclcpp::SensorDataQoS().reliable(),
-      std::bind(&PerseDriver::cmdVelCallback, this, std::placeholders::_1));
-
-  led_subscription = node->create_subscription<std_msgs::msg::Bool>(
-      "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
-      std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
-
-  this->encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
-      "/perse/sensors/encoder_fusion/distance", 10);
-  std_msgs::msg::Float64 encoder_msg;
-  encoder_msg.data = 0;
-  encoder_pub->publish(encoder_msg);
-
-  this->bumper_pub =
-      node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/bumper", 10);
-  bumper_msg.data = false;
-  bumper_pub->publish(bumper_msg);
-
-  this->inductive_sensor_pub = node->create_publisher<std_msgs::msg::Bool>(
-      "/perse/sensors/inductive_sensor", 10);
-  inductive_sensor_msg.data = false;
-  inductive_sensor_pub->publish(inductive_sensor_msg);
-
-  // Get the container node for the path geometry using the C API
   path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
   if (!path_group_node_) {
     RCLCPP_ERROR(node->get_logger(),
@@ -82,13 +111,10 @@ void PerseDriver::init(
                  "PATH_GROUP Group {}' node to your Webots world.");
   }
 
-  // Subscribe to the path topic
-  path_subscription_ = node->create_subscription<nav_msgs::msg::Path>(
-      "/my_robot/path", 10,
-      std::bind(&PerseDriver::pathCallback, this, std::placeholders::_1));
+  spawnCones();
 }
 
-void PerseDriver::fetch_points(const std::string yaml_file_path) {
+void PerseDriver::fetchPoints(const std::string yaml_file_path) {
   // Vector to store the read points
   points.clear();
 
@@ -97,9 +123,15 @@ void PerseDriver::fetch_points(const std::string yaml_file_path) {
     YAML::Node config = YAML::LoadFile(yaml_file_path);
 
     // Access the 'ros__parameters' node
-    if (config["/decision_node"] &&
-        config["/decision_node"]["ros__parameters"]) {
-      YAML::Node parameters = config["/decision_node"]["ros__parameters"];
+    if ((config["/decision_node"] &&
+         config["/decision_node"]["ros__parameters"]) ||
+        (config["/**"] && config["/**"]["ros__parameters"])) {
+      YAML::Node parameters;
+      if (config["/decision_node"]) {
+        parameters = config["/decision_node"]["ros__parameters"];
+      } else {
+        parameters = config["/**"]["ros__parameters"];
+      }
 
       // Loop through the points p1, p2, p3, etc.
       // Start from 1 and continue until a point is not found
@@ -177,32 +209,22 @@ void PerseDriver::spawnCones() {
   }
 }
 
-void PerseDriver::ledCallback(const std_msgs::msg::Bool::SharedPtr msg) {
-  led_msg.data = msg->data;
-}
-
-void PerseDriver::cmdVelCallback(
-    const geometry_msgs::msg::Twist::SharedPtr msg) {
-  cmd_vel_msg.linear = msg->linear;
-  cmd_vel_msg.angular = msg->angular;
-}
-
 void PerseDriver::step() {
   if (wbu_driver_step() == -1) {
     return; // Sai se a simulação terminou
   }
 
   // Motor e Servo
-  auto forward_speed = cmd_vel_msg.linear.x;
-  auto angular_speed = cmd_vel_msg.angular.z;
+  auto velocity_pwm = std::clamp<double>(cmd_vel_msg.linear.x, -1.0, 1.0);
+  auto steer_angle =
+      std::clamp<double>(cmd_vel_msg.angular.z, -max_steer, max_steer);
 
-  auto command_servo_left =
-      angular_speed == 0.0 ? 0.0
-                           : std::clamp<double>(angular_speed, -0.99, 0.99) *
-                                 sgn(-forward_speed);
+  auto command_steer_angle = steer_angle * sgn(-velocity_pwm);
 
-  wbu_driver_set_cruising_speed(forward_speed * 3.6);
-  wbu_driver_set_steering_angle(command_servo_left);
+  wbu_driver_set_cruising_speed(velocity_pwm >= 0
+                                    ? velocity_pwm * max_forward * 3.6
+                                    : velocity_pwm * max_backward * 3.6);
+  wbu_driver_set_steering_angle(command_steer_angle);
 
   // Encoder
   double encoder_reading =
@@ -305,8 +327,6 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
 
   // Clear existing path if one was already drawn
   wb_supervisor_field_remove_mf(children_field, 0);
-  // if (wb_supervisor_field_get_mf_size(children_field) > 0) {
-  // }
 
   // Import the new path node
   wb_supervisor_field_import_mf_node_from_string(children_field, -1,

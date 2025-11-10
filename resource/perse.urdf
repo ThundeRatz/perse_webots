@@ -25,6 +25,7 @@
       <ros>
         <enabled>true</enabled>
         <alwaysOn>true</alwaysOn>
+        <topicName>/perse/sensors/camera</topicName>
       </ros>
     </device>
 

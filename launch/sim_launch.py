@@ -11,11 +11,12 @@ import math
 
 def launch_setup(context, *args, **kwargs):
     odometry_variables = LaunchConfiguration("odometry_variables").perform(context)
+    perse_bringup = get_package_share_directory("perse_bringup")
+    perse_properties = os.path.join(perse_bringup, "config", "perse_properties.yaml")
 
     if odometry_variables == "":
-        perse_dir = get_package_share_directory("perse_bringup")
         odometry_variables = os.path.join(
-            perse_dir, "config", "odometry_variables.yaml"
+            perse_bringup, "config", "odometry_variables.yaml"
         )
 
     package_dir = get_package_share_directory("perse_webots")
@@ -24,13 +25,14 @@ def launch_setup(context, *args, **kwargs):
     webots = WebotsLauncher(world=os.path.join(package_dir, "worlds", "vehicle.wbt"))
 
     perse_driver = WebotsController(
-        robot_name="perse",
+        robot_name="perse_webots",
         parameters=[
             {
                 "robot_description": robot_description_path,
                 "odometry_variables": odometry_variables,
                 "encoder_constant": 1 / 14,
-            }
+            },
+            perse_properties
         ],
         respawn=True,
     )

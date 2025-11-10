@@ -34,6 +34,6 @@ PROTO ConePlate [
         }
       }
     ]
-    boundingObject USE PLATE_SHAPE
+    # boundingObject USE PLATE_SHAPE
   }
 }

@@ -64,7 +64,6 @@ install(DIRECTORY
   worlds
   meshes
   protos
-  config
   DESTINATION share/${PROJECT_NAME}/
 )
 ament_export_include_directories(

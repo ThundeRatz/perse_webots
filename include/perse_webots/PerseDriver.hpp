@@ -39,10 +39,13 @@ public:
 
 private:
   bool preStep();
-  void spawnCones();
-  void fetch_points(const std::string yaml_file_path);
-  void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
 
+  void spawnCones();
+  void fetchPoints(const std::string yaml_file_path);
+  void fetchParameters();
+  void setupCallbacks();
+
+  void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void ledCallback(const std_msgs::msg::Bool::SharedPtr msg);
 
@@ -57,6 +60,7 @@ private:
   WbNodeRef path_group_node_;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
 
+  std_msgs::msg::Float64 encoder_msg;
   double last_encoder_reading = 0;
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr encoder_pub;
 
@@ -71,6 +75,10 @@ private:
   double last_update;
 
   double encoder_constant;
+
+  double max_forward;
+  double max_backward;
+  double max_steer;
 
   WbNodeRef inductive_sensor_node;
   std::vector<Point> points = {{-1, -1}, {1, 1}};
