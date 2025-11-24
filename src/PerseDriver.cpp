@@ -50,7 +50,7 @@ void PerseDriver::setupCallbacks() {
       "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
       std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
   path_subscription_ = node->create_subscription<nav_msgs::msg::Path>(
-      "/my_robot/path", rclcpp::SensorDataQoS().reliable(),
+      "/perse/localization/path", rclcpp::SensorDataQoS().reliable(),
       std::bind(&PerseDriver::pathCallback, this, std::placeholders::_1));
 
   encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
@@ -81,8 +81,66 @@ void PerseDriver::cmdVelCallback(
   cmd_vel_msg.angular = msg->angular;
 }
 
-void PerseDriver::init(
+void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
+  if (!path_group_node_ || msg->poses.empty()) {
+    return;
+  }
 
+  std::string points_str;
+  std::string indices_str;
+
+  for (size_t i = 0; i < msg->poses.size(); ++i) {
+    const auto &pose = msg->poses[i].pose;
+    points_str += std::to_string(pose.position.x) + " " +
+                  std::to_string(pose.position.y) + " " + std::to_string(0.1);
+    indices_str += std::to_string(i);
+
+    if (i < msg->poses.size() - 1) {
+      points_str += ", ";
+      indices_str += ", ";
+    }
+  }
+
+  // Generate the VRML string for the IndexedLineSet geometry
+  std::string shape_string = "Shape {\n"
+                             "  appearance Appearance {\n"
+                             "    material Material {\n"
+                             "      emissiveColor 1 0 0\n" // Red line
+                             "    }\n"
+                             "  }\n"
+                             "  geometry IndexedLineSet {\n"
+                             "    coord Coordinate {\n"
+                             "      point [\n"
+                             "        " +
+                             points_str +
+                             "\n"
+                             "      ]\n"
+                             "    }\n"
+                             "    coordIndex [\n"
+                             "      " +
+                             indices_str +
+                             "\n"
+                             "    ]\n"
+                             "  }\n"
+                             "}";
+
+  WbFieldRef children_field =
+      wb_supervisor_node_get_field(path_group_node_, "children");
+  if (!children_field) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not get 'children' field of PATH_GROUP.");
+    return;
+  }
+
+  // Clear existing path if one was already drawn
+  wb_supervisor_field_remove_mf(children_field, 0);
+
+  // Import the new path node
+  wb_supervisor_field_import_mf_node_from_string(children_field, -1,
+                                                 shape_string.c_str());
+}
+
+void PerseDriver::init(
     webots_ros2_driver::WebotsNode *node,
     std::unordered_map<std::string, std::string> &parameters) {
   this->node = node;
@@ -271,66 +329,6 @@ void PerseDriver::step() {
   } else {
     inductive_sensor_msg.data = inductive_sensor_reading;
   }
-}
-
-void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
-  if (!path_group_node_ || msg->poses.empty()) {
-    return;
-  }
-
-  std::string points_str;
-  std::string indices_str;
-
-  for (size_t i = 0; i < msg->poses.size(); ++i) {
-    const auto &pose = msg->poses[i].pose;
-    points_str += std::to_string(pose.position.x) + " " +
-                  std::to_string(pose.position.y) + " " +
-                  std::to_string(pose.position.z);
-    indices_str += std::to_string(i);
-
-    if (i < msg->poses.size() - 1) {
-      points_str += ", ";
-      indices_str += ", ";
-    }
-  }
-
-  // Generate the VRML string for the IndexedLineSet geometry
-  std::string shape_string = "Shape {\n"
-                             "  appearance Appearance {\n"
-                             "    material Material {\n"
-                             "      emissiveColor 1 0 0\n" // Red line
-                             "    }\n"
-                             "  }\n"
-                             "  geometry IndexedLineSet {\n"
-                             "    coord Coordinate {\n"
-                             "      point [\n"
-                             "        " +
-                             points_str +
-                             "\n"
-                             "      ]\n"
-                             "    }\n"
-                             "    coordIndex [\n"
-                             "      " +
-                             indices_str +
-                             "\n"
-                             "    ]\n"
-                             "  }\n"
-                             "}";
-
-  WbFieldRef children_field =
-      wb_supervisor_node_get_field(path_group_node_, "children");
-  if (!children_field) {
-    RCLCPP_ERROR(node->get_logger(),
-                 "Could not get 'children' field of PATH_GROUP.");
-    return;
-  }
-
-  // Clear existing path if one was already drawn
-  wb_supervisor_field_remove_mf(children_field, 0);
-
-  // Import the new path node
-  wb_supervisor_field_import_mf_node_from_string(children_field, -1,
-                                                 shape_string.c_str());
 }
 
 bool PerseDriver::preStep() {

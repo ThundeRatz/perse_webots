@@ -52,7 +52,7 @@ CircleArena {
 DEF PATH_GROUP Group {
 }
 Pose {
-  translation -0.1285 0.1285 0
+  translation -0.1285 0 0
   children [
     Car {
       translation                    0 0 0
@@ -64,7 +64,7 @@ Pose {
       supervisor                     TRUE
       synchronization                TRUE
       trackFront                     0.226
-      trackRear                      0.257
+      trackRear                      0.226
       wheelbase                      0.257
       minSteeringAngle              -0.8
       maxSteeringAngle               0.8
