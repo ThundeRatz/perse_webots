@@ -45,7 +45,8 @@ private:
   void fetchParameters();
   void setupCallbacks();
 
-  void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
+  void pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
+                    size_t path_index);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void ledCallback(const std_msgs::msg::Bool::SharedPtr msg);
 
@@ -79,6 +80,11 @@ private:
   double max_forward;
   double max_backward;
   double max_steer;
+
+  std::vector<std::string> path_colors_;
+  std::vector<std::string> path_topics_;
+  std::vector<std::shared_ptr<rclcpp::Subscription<nav_msgs::msg::Path>>>
+      path_subscriptions_;
 
   WbNodeRef inductive_sensor_node;
   std::vector<Point> points = {{-1, -1}, {1, 1}};

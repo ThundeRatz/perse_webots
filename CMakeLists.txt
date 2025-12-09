@@ -61,9 +61,7 @@ install(TARGETS
 install(DIRECTORY
   launch
   resource
-  worlds
-  meshes
-  protos
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 ament_export_include_directories(

@@ -1,0 +1,13 @@
+perse_webots:
+  ros__parameters:
+    # Multiple path topics to visualize
+    path_topics:
+      - "/perse/localization/path"
+      - "/perse/optimization/path"
+      # - "/perse/mpc/calculated_path"
+
+    # Colors in RGB format (values 0.0 to 1.0)
+    path_colors:
+      - "1.0 0.0 0.0"  # Red
+      - "0.0 1.0 0.0"  # Green
+      # - "0.0 0.0 1.0"  # Blue

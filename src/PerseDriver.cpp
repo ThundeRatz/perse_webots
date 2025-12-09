@@ -40,6 +40,17 @@ void PerseDriver::fetchParameters() {
   auto odometry_variables =
       node->declare_parameter("odometry_variables", rclcpp::PARAMETER_STRING);
   fetchPoints(odometry_variables.get<std::string>());
+
+  // NEW: Get path topics to subscribe to
+  node->declare_parameter("path_topics", rclcpp::PARAMETER_STRING_ARRAY);
+  auto path_topics = node->get_parameter("path_topics").as_string_array();
+
+  // NEW: Get colors for each path (RGB format)
+  node->declare_parameter("path_colors", rclcpp::PARAMETER_STRING_ARRAY);
+  auto path_colors = node->get_parameter("path_colors").as_string_array();
+
+  path_topics_ = path_topics;
+  path_colors_ = path_colors;
 }
 
 void PerseDriver::setupCallbacks() {
@@ -49,9 +60,20 @@ void PerseDriver::setupCallbacks() {
   led_subscription = node->create_subscription<std_msgs::msg::Bool>(
       "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
       std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
-  path_subscription_ = node->create_subscription<nav_msgs::msg::Path>(
-      "/perse/localization/path", rclcpp::SensorDataQoS().reliable(),
-      std::bind(&PerseDriver::pathCallback, this, std::placeholders::_1));
+
+  // NEW: Subscribe to multiple path topics
+  for (size_t i = 0; i < path_topics_.size(); ++i) {
+    auto topic = path_topics_[i];
+    auto subscription = node->create_subscription<nav_msgs::msg::Path>(
+        topic, rclcpp::SensorDataQoS().reliable(),
+        [this, i](const nav_msgs::msg::Path::SharedPtr msg) {
+          this->pathCallback(msg, i);
+        });
+    path_subscriptions_.push_back(subscription);
+
+    RCLCPP_INFO(node->get_logger(), "Subscribed to path topic: %s",
+                topic.c_str());
+  }
 
   encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
       "/perse/sensors/encoder_fusion/distance",
@@ -81,7 +103,9 @@ void PerseDriver::cmdVelCallback(
   cmd_vel_msg.angular = msg->angular;
 }
 
-void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
+// NEW: Modified to handle multiple paths
+void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
+                               size_t path_index) {
   if (!path_group_node_ || msg->poses.empty()) {
     return;
   }
@@ -101,11 +125,19 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     }
   }
 
+  // Get color for this path (default to red if not specified)
+  std::string color = "1 0 0"; // Default red
+  if (path_index < path_colors_.size()) {
+    color = path_colors_[path_index];
+  }
+
   // Generate the VRML string for the IndexedLineSet geometry
   std::string shape_string = "Shape {\n"
                              "  appearance Appearance {\n"
                              "    material Material {\n"
-                             "      emissiveColor 1 0 0\n" // Red line
+                             "      emissiveColor " +
+                             color +
+                             "\n"
                              "    }\n"
                              "  }\n"
                              "  geometry IndexedLineSet {\n"
@@ -132,10 +164,23 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     return;
   }
 
-  // Clear existing path if one was already drawn
-  wb_supervisor_field_remove_mf(children_field, 0);
+  // NEW: Manage path visualization by index
+  int field_count = wb_supervisor_field_get_count(children_field);
 
-  // Import the new path node
+  // Remove existing path at this index if it exists
+  if (path_index < field_count) {
+    wb_supervisor_field_remove_mf(children_field, path_index);
+    field_count--; // Update count after removal
+  }
+
+  // Fill gaps with empty groups if needed (when path_index > field_count)
+  while (field_count < path_index) {
+    wb_supervisor_field_import_mf_node_from_string(children_field, -1,
+                                                   "Group {}");
+    field_count++;
+  }
+
+  // Import the new path node at the end (which is now the correct index)
   wb_supervisor_field_import_mf_node_from_string(children_field, -1,
                                                  shape_string.c_str());
 }
@@ -144,6 +189,14 @@ void PerseDriver::init(
     webots_ros2_driver::WebotsNode *node,
     std::unordered_map<std::string, std::string> &parameters) {
   this->node = node;
+
+  path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
+  if (!path_group_node_) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not find DEF 'PATH_GROUP'. Please add a 'DEF "
+                 "PATH_GROUP Group {}' node to your Webots world.");
+  }
+
   fetchParameters();
   setupCallbacks();
 
@@ -161,13 +214,6 @@ void PerseDriver::init(
   wb_touch_sensor_enable(bumper, publish_timestep * 1000);
 
   inductive_sensor_node = wb_supervisor_node_get_from_def("INDUCTIVE_SENSOR");
-
-  path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
-  if (!path_group_node_) {
-    RCLCPP_ERROR(node->get_logger(),
-                 "Could not find DEF 'PATH_GROUP'. Please add a 'DEF "
-                 "PATH_GROUP Group {}' node to your Webots world.");
-  }
 
   spawnCones();
 }
