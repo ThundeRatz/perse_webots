@@ -1,0 +1,293 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/released/projects/devices/slamtec/protos/RpLidarA2.proto"
+EXTERNPROTO "./PerseWheel.proto"
+EXTERNPROTO "./vehicle/Car.proto"
+
+PROTO Perse [
+  # --- Configuração de Posição ---
+  field SFVec3f    translation_offset   0.1285 0.1285 0   # Offset de translação inicial do robô
+  field SFRotation rotation_offset      0 0 1 0           # Rotação inicial do robô
+]
+{
+  Car {
+    translation IS translation_offset
+    rotation    IS rotation_offset
+
+    name                           "perse_webots"
+    model                          "car"
+    controller                     "<extern>"
+    controllerArgs                 []
+    supervisor                     TRUE
+    synchronization                TRUE
+    trackFront                     0.226
+    trackRear                      0.226
+    wheelbase                      0.257
+    suspensionFrontSpringConstant  10000
+    suspensionFrontDampingConstant 5000
+    suspensionRearSpringConstant   10000
+    suspensionRearDampingConstant  5000
+    wheelsDampingConstant          1
+    engineSound                    "none" # "../vehicle/sounds/engine.wav"
+    engineSoundRpmReference        1000
+    minSteeringAngle              -0.8
+    maxSteeringAngle               0.8
+    maxSteeringTorque              500
+    extensionSlot                  [
+      Gyro {
+        name "gyro"
+      }
+      Accelerometer {
+        name "accelerometer"
+      }
+      InertialUnit {
+        name "inertial unit"
+      }
+      TouchSensor {
+        type "bumper"
+        name "bumper"
+        translation 0.38 0 0.09
+        physics Physics {}
+        children [
+          Transform {
+            scale 0.001 0.001 0.001
+            rotation 0 0 1 -1.5707
+            children [
+              Pose {
+                translation -175.46 -102 13.9
+                rotation 1 0 0 -1.5707
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.7 0.7 0.7
+                        roughness 1
+                        metalness 0
+                    }
+                    geometry Mesh {
+                      url "../meshes/bumper.stl"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+        boundingObject Box {
+          size 0.01 0.35 0.05
+        }
+      }
+      DEF INDUCTIVE_SENSOR Solid {
+        translation 0.305 -0.003 0.0086
+        rotation 0 1 0 -0.5224
+        name "inductive_sensor"
+        children [
+          Shape {
+            appearance PBRAppearance {
+              baseColor 0.96 0.66 0.258
+              roughness 1
+              metalness 0
+            }
+            geometry Cylinder {
+              height 0.06
+              radius 0.0075
+            }
+          }
+        ]
+      }
+      RpLidarA2 {
+        translation 0.077 0 0.21
+      }
+      Solid {
+        translation -0.08 0.13 -0.02
+        name "locomocao"
+        children [
+          Transform {
+            scale 0.001 0.001 0.001
+            rotation 1 0 0 1.5707
+            children [
+              Shape {
+                castShadows FALSE
+                appearance PBRAppearance {
+                  baseColor 0.3 0.3 0.3
+                  roughness 1
+                  metalness 0
+                }
+                geometry Mesh {
+                  url "../meshes/locomocao.stl"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      Solid {
+        translation -0.08 0.11 0.09
+        name "tampa"
+        children [
+          Transform {
+            scale 0.001 0.001 0.001
+            rotation 1 0 0 1.5707
+            children [
+              Shape {
+                castShadows FALSE
+                  appearance PBRAppearance {
+                    baseColor 0.1 0.1 0.1
+                      roughness 1
+                      metalness 0
+                  }
+                geometry Mesh {
+                  url "../meshes/tampa.stl"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      LED {
+        name "led"
+        gradual FALSE
+        translation -0.075 0 0.19
+        children [
+          Transform {
+            scale 0.09 0.09 0.09
+            translation -0.005 0.11 -0.09
+            children [
+              Shape {
+                castShadows FALSE
+                appearance PBRAppearance {
+                  baseColor 0.8 0.8 0.8
+                    roughness 0.2
+                    metalness 0.5
+                    emissiveIntensity 200
+                }
+                geometry Mesh {
+                  url "../meshes/led.stl"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      Camera {
+        translation 0.31 0 0.18
+        width 416
+        height 416
+        recognition Recognition {}
+        children [
+          Transform {
+            scale 0.001 0.001 0.001
+            rotation 1 0 0 1.5707
+            translation -0.3 0.045 -0.09
+            children [
+              Shape {
+                castShadows FALSE
+                appearance PBRAppearance {
+                  baseColor 0.2 0.2 0.2
+                  roughness 1
+                  metalness 0
+                }
+                geometry Mesh {
+                  url "../meshes/camera.stl"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+    type                           "propulsion"
+    engineType                     "electric"
+    brakeCoefficient               700 # default: 700
+    time0To100                     2
+    maxVelocity                    5
+    engineMaxTorque                10
+    engineMaxPower                 500
+    engineMaxRPM                   450
+    engineMinRPM                   1
+    gearRatio                      [-1 1]
+    window                         "<generic>"
+    boundingObject                 NULL
+    radarCrossSection              6.756757
+    recognitionColors              []
+    physics Physics {
+      mass 3.5
+      density -1
+      inertiaMatrix [
+          0.060921,   # Ixx em kg*m^2
+          0.111164,   # Iyy em kg*m^2
+          0.103591    # Izz em kg*m^2
+          -0.002364,  # Ixy em kg*m^2
+          0.000154,   # Ixz em kg*m^2
+          -0.001326,  # Iyz em kg*m^2
+      ]
+      centerOfMass [
+        0.1285 0 -0.1
+      ]
+    }
+    wheelFrontRight PerseWheel {
+      name "front right wheel"
+      thickness          0.053572
+      tireRadius         0.071429
+      curvatureFactor    0.0625
+      rimRadius          0.05
+      rimBeamWidth       0.017857
+      centralInnerRadius 0.016071
+      centralOuterRadius 0.023214
+      rimBeamThickness   0.035715
+      rimBeamOffset      0.005357
+      contactMaterial "tire"
+      physics DEF WHEEL_PHYSICS Physics {
+        density -1
+        mass 0.1
+      }
+    }
+    wheelFrontLeft PerseWheel {
+      name "front left wheel"
+      wheelSide TRUE
+      thickness          0.053572
+      tireRadius         0.071429
+      curvatureFactor    0.0625
+      rimRadius          0.05
+      rimBeamWidth       0.017857
+      centralInnerRadius 0.016071
+      centralOuterRadius 0.023214
+      rimBeamThickness   0.035715
+      rimBeamOffset      0.005357
+      contactMaterial "tire"
+      physics USE WHEEL_PHYSICS
+    }
+    wheelRearRight PerseWheel {
+      name "rear right wheel" 
+      thickness          0.053572
+      tireRadius         0.071429
+      curvatureFactor    0.0625
+      rimRadius          0.05
+      rimBeamWidth       0.017857
+      centralInnerRadius 0.016071
+      centralOuterRadius 0.023214
+      rimBeamThickness   0.035715
+      rimBeamOffset      0.005357
+      contactMaterial "tire"
+      physics USE WHEEL_PHYSICS
+    }
+    wheelRearLeft PerseWheel {
+      name "rear left wheel"
+      wheelSide TRUE
+      thickness          0.053572
+      tireRadius         0.071429
+      curvatureFactor    0.0625
+      rimRadius          0.05
+      rimBeamWidth       0.017857
+      centralInnerRadius 0.016071
+      centralOuterRadius 0.023214
+      rimBeamThickness   0.035715
+      rimBeamOffset      0.005357
+      contactMaterial "tire"
+      physics USE WHEEL_PHYSICS
+    }
+  }
+}
+
+
+

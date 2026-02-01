@@ -22,6 +22,42 @@
 
 namespace perse_driver {
 
+void PerseDriver::init(
+    webots_ros2_driver::WebotsNode *node,
+    std::unordered_map<std::string, std::string> &parameters) {
+  this->node = node;
+
+  path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
+  if (!path_group_node_) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not find DEF 'PATH_GROUP'. Please add a 'DEF "
+                 "PATH_GROUP Group {}' node to your Webots world.");
+  }
+
+  fetchParameters();
+  setupCallbacks();
+
+  wbu_car_init();
+  wbu_driver_init();
+
+  // This parameter is read when loading the URDF file
+  publish_timestep = parameters.count("updateRate")
+                         ? 1.0 / atof(parameters["updateRate"].c_str())
+                         : 0;
+
+  bumper = wb_robot_get_device("bumper");
+  led = wb_robot_get_device("led");
+
+  wb_touch_sensor_enable(bumper, publish_timestep * 1000);
+
+  WbNodeRef perse_node = wb_supervisor_node_get_from_def("PERSE");
+
+  inductive_sensor_node =
+      wb_supervisor_node_get_from_proto_def(perse_node, "INDUCTIVE_SENSOR");
+
+  spawnCones();
+}
+
 void PerseDriver::fetchParameters() {
   max_forward = node->declare_parameter("properties.limits.speed.forward",
                                         rclcpp::PARAMETER_DOUBLE)
@@ -61,13 +97,14 @@ void PerseDriver::setupCallbacks() {
       "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
       std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
 
-  // NEW: Subscribe to multiple path topics
+  // Subscribe to multiple path topics
   for (size_t i = 0; i < path_topics_.size(); ++i) {
     auto topic = path_topics_[i];
     auto subscription = node->create_subscription<nav_msgs::msg::Path>(
         topic, rclcpp::SensorDataQoS().reliable(),
         [this, i](const nav_msgs::msg::Path::SharedPtr msg) {
           this->pathCallback(msg, i);
+          RCLCPP_INFO(node->get_logger(), "received path at index: %zu", i);
         });
     path_subscriptions_.push_back(subscription);
 
@@ -103,7 +140,6 @@ void PerseDriver::cmdVelCallback(
   cmd_vel_msg.angular = msg->angular;
 }
 
-// NEW: Modified to handle multiple paths
 void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
                                size_t path_index) {
   if (!path_group_node_ || msg->poses.empty()) {
@@ -164,58 +200,22 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
     return;
   }
 
-  // NEW: Manage path visualization by index
+  // Manage path visualization by index
   int field_count = wb_supervisor_field_get_count(children_field);
 
-  // Remove existing path at this index if it exists
-  if (path_index < field_count) {
-    wb_supervisor_field_remove_mf(children_field, path_index);
-    field_count--; // Update count after removal
-  }
-
-  // Fill gaps with empty groups if needed (when path_index > field_count)
-  while (field_count < path_index) {
+  // Fill gaps with empty groups if needed (when path_index >= field_count)
+  while (field_count <= path_index) {
     wb_supervisor_field_import_mf_node_from_string(children_field, -1,
                                                    "Group {}");
     field_count++;
   }
 
-  // Import the new path node at the end (which is now the correct index)
-  wb_supervisor_field_import_mf_node_from_string(children_field, -1,
+  // Remove existing path at this index (now guaranteed to exist)
+  wb_supervisor_field_remove_mf(children_field, path_index);
+
+  // Import the new path node at the specific index
+  wb_supervisor_field_import_mf_node_from_string(children_field, path_index,
                                                  shape_string.c_str());
-}
-
-void PerseDriver::init(
-    webots_ros2_driver::WebotsNode *node,
-    std::unordered_map<std::string, std::string> &parameters) {
-  this->node = node;
-
-  path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
-  if (!path_group_node_) {
-    RCLCPP_ERROR(node->get_logger(),
-                 "Could not find DEF 'PATH_GROUP'. Please add a 'DEF "
-                 "PATH_GROUP Group {}' node to your Webots world.");
-  }
-
-  fetchParameters();
-  setupCallbacks();
-
-  wbu_car_init();
-  wbu_driver_init();
-
-  // This parameter is read when loading the URDF file
-  publish_timestep = parameters.count("updateRate")
-                         ? 1.0 / atof(parameters["updateRate"].c_str())
-                         : 0;
-
-  bumper = wb_robot_get_device("bumper");
-  led = wb_robot_get_device("led");
-
-  wb_touch_sensor_enable(bumper, publish_timestep * 1000);
-
-  inductive_sensor_node = wb_supervisor_node_get_from_def("INDUCTIVE_SENSOR");
-
-  spawnCones();
 }
 
 void PerseDriver::fetchPoints(const std::string yaml_file_path) {
@@ -328,6 +328,10 @@ void PerseDriver::step() {
   wbu_driver_set_cruising_speed(velocity_pwm >= 0
                                     ? velocity_pwm * max_forward * 3.6
                                     : velocity_pwm * max_backward * 3.6);
+
+  // wbu_driver_set_gear(velocity_pwm >= 0 ? 1 : -1);
+  // wbu_driver_set_throttle(std::abs(velocity_pwm));
+
   wbu_driver_set_steering_angle(command_steer_angle);
 
   // Encoder
@@ -379,9 +383,9 @@ void PerseDriver::step() {
 
 bool PerseDriver::preStep() {
   // Update only if needed
-  if (wb_robot_get_time() - last_update < publish_timestep)
-    return false;
-  last_update = wb_robot_get_time();
+  // if (wb_robot_get_time() - last_update < publish_timestep)
+  // return false;
+  // last_update = wb_robot_get_time();
   return true;
 }
 

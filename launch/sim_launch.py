@@ -124,7 +124,7 @@ def launch_setup(context, *args, **kwargs):
 
     robot_description_path = os.path.join(package_dir, "resource", "perse.urdf")
     webots = WebotsLauncher(
-        world=os.path.join(package_dir, "resource", "worlds", "vehicle.wbt"),
+        world=os.path.join(package_dir, "resource", "worlds", "circle_arena.wbt"),
         gui=gui,
     )
 
