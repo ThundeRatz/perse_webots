@@ -34,6 +34,13 @@ void PerseDriver::init(
                  "PATH_GROUP Group {}' node to your Webots world.");
   }
 
+  look_ahead_group_node_ = wb_supervisor_node_get_from_def("LOOK_AHEAD_GROUP");
+  if (!look_ahead_group_node_) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not find DEF 'LOOK_AHEAD_GROUP'. Please add a 'DEF "
+                 "LOOK_AHEAD_GROUP Group {}' node to your Webots world.");
+  }
+
   fetchParameters();
   setupCallbacks();
 
@@ -85,8 +92,13 @@ void PerseDriver::fetchParameters() {
   node->declare_parameter("path_colors", rclcpp::PARAMETER_STRING_ARRAY);
   auto path_colors = node->get_parameter("path_colors").as_string_array();
 
+  node->declare_parameter("topics.look_ahead_index", rclcpp::PARAMETER_STRING);
+  auto look_ahead_index_topic =
+      node->get_parameter("topics.look_ahead_index").as_string();
+
   path_topics_ = path_topics;
   path_colors_ = path_colors;
+  this->look_ahead_index_topic_ = look_ahead_index_topic;
 }
 
 void PerseDriver::setupCallbacks() {
@@ -108,8 +120,19 @@ void PerseDriver::setupCallbacks() {
         });
     path_subscriptions_.push_back(subscription);
 
+    latest_paths_.push_back(nullptr);
+
     RCLCPP_INFO(node->get_logger(), "Subscribed to path topic: %s",
                 topic.c_str());
+  }
+
+  if (!this->look_ahead_index_topic_.empty()) {
+    look_ahead_index_subscription_ = node->create_subscription<std_msgs::msg::Int64>(
+        this->look_ahead_index_topic_, rclcpp::SensorDataQoS().reliable(),
+        std::bind(&PerseDriver::lookAheadIndexCallback, this, std::placeholders::_1));
+
+    RCLCPP_INFO(node->get_logger(), "Subscribed to look-ahead index topic: %s",
+                this->look_ahead_index_topic_.c_str());
   }
 
   encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
@@ -145,6 +168,11 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
   if (!path_group_node_ || msg->poses.empty()) {
     return;
   }
+
+  if (path_index >= latest_paths_.size()) {
+    latest_paths_.resize(path_index + 1);
+  }
+  latest_paths_[path_index] = msg;
 
   std::string points_str;
   std::string indices_str;
@@ -216,6 +244,102 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
   // Import the new path node at the specific index
   wb_supervisor_field_import_mf_node_from_string(children_field, path_index,
                                                  shape_string.c_str());
+
+  if (look_ahead_index_ >= 0) {
+    const auto look_ahead_pose_index = std::min<size_t>(
+        static_cast<size_t>(look_ahead_index_), msg->poses.size() - 1);
+
+    const auto &pose = msg->poses[look_ahead_pose_index].pose;
+    std::stringstream sphere_string;
+    sphere_string << "Transform {\n"
+                  << "  translation " << pose.position.x << " "
+                  << pose.position.y << " 0.1\n"
+                  << "  children [\n"
+                  << "    Shape {\n"
+                  << "      appearance Appearance {\n"
+                  << "        material Material {\n"
+                  << "          emissiveColor 1 1 0\n"
+                  << "        }\n"
+                  << "      }\n"
+                  << "      geometry Sphere { radius 0.04 }\n"
+                  << "    }\n"
+                  << "  ]\n"
+                  << "}";
+
+    WbFieldRef look_ahead_children_field =
+        wb_supervisor_node_get_field(look_ahead_group_node_, "children");
+    if (look_ahead_children_field) {
+      int look_ahead_field_count = wb_supervisor_field_get_count(look_ahead_children_field);
+      while (look_ahead_field_count <= static_cast<int>(path_index)) {
+        wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, -1,
+                                                       "Group {}");
+        look_ahead_field_count++;
+      }
+
+      wb_supervisor_field_remove_mf(look_ahead_children_field, path_index);
+      wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field,
+                                                     path_index,
+                                                     sphere_string.str().c_str());
+    }
+  }
+}
+
+void PerseDriver::lookAheadIndexCallback(const std_msgs::msg::Int64::SharedPtr msg) {
+  if (!look_ahead_group_node_) {
+    return;
+  }
+
+  look_ahead_index_ = msg->data;
+
+  if (look_ahead_index_ < 0) {
+    return;
+  }
+
+  WbFieldRef look_ahead_children_field =
+      wb_supervisor_node_get_field(look_ahead_group_node_, "children");
+  if (!look_ahead_children_field) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Could not get 'children' field of LOOK_AHEAD_GROUP.");
+    return;
+  }
+
+  for (size_t path_index = 0; path_index < latest_paths_.size(); ++path_index) {
+    const auto &path = latest_paths_[path_index];
+    if (!path || path->poses.empty()) {
+      continue;
+    }
+
+    const auto look_ahead_pose_index =
+        std::min<size_t>(static_cast<size_t>(look_ahead_index_), path->poses.size() - 1);
+    const auto &pose = path->poses[look_ahead_pose_index].pose;
+
+    std::stringstream sphere_string;
+    sphere_string << "Transform {\n"
+                  << "  translation " << pose.position.x << " "
+                  << pose.position.y << " 0.1\n"
+                  << "  children [\n"
+                  << "    Shape {\n"
+                  << "      appearance Appearance {\n"
+                  << "        material Material {\n"
+                  << "          emissiveColor 1 1 0\n"
+                  << "        }\n"
+                  << "      }\n"
+                  << "      geometry Sphere { radius 0.04 }\n"
+                  << "    }\n"
+                  << "  ]\n"
+                  << "}";
+
+    int look_ahead_field_count = wb_supervisor_field_get_count(look_ahead_children_field);
+    while (look_ahead_field_count <= static_cast<int>(path_index)) {
+      wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, -1,
+                                                     "Group {}");
+      look_ahead_field_count++;
+    }
+
+    wb_supervisor_field_remove_mf(look_ahead_children_field, path_index);
+    wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, path_index,
+                                                   sphere_string.str().c_str());
+  }
 }
 
 void PerseDriver::fetchPoints(const std::string yaml_file_path) {

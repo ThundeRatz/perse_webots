@@ -112,6 +112,7 @@ def launch_setup(context, *args, **kwargs):
     perse_bringup = get_package_share_directory("perse_bringup")
     perse_webots = get_package_share_directory("perse_webots")
 
+    topics = os.path.join(perse_bringup, "config", "topics.yaml")
     perse_properties = os.path.join(perse_bringup, "config", "perse_properties.yaml")
     perse_driver_parameters = os.path.join(perse_webots, "config", "perse_driver.yaml")
 
@@ -138,6 +139,7 @@ def launch_setup(context, *args, **kwargs):
             },
             perse_driver_parameters,
             perse_properties,
+            topics
         ],
         respawn=True,
     )

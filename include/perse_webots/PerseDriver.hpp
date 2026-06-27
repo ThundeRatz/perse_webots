@@ -13,6 +13,7 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/float64.hpp"
+#include "std_msgs/msg/int64.hpp"
 
 #include <math.h>
 
@@ -47,6 +48,7 @@ private:
 
   void pathCallback(const nav_msgs::msg::Path::SharedPtr msg,
                     size_t path_index);
+  void lookAheadIndexCallback(const std_msgs::msg::Int64::SharedPtr msg);
   void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg);
   void ledCallback(const std_msgs::msg::Bool::SharedPtr msg);
 
@@ -59,7 +61,9 @@ private:
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr led_subscription;
 
   WbNodeRef path_group_node_;
+  WbNodeRef look_ahead_group_node_;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_subscription_;
+  rclcpp::Subscription<std_msgs::msg::Int64>::SharedPtr look_ahead_index_subscription_;
 
   std_msgs::msg::Float64 encoder_msg;
   double last_encoder_reading = 0;
@@ -83,8 +87,12 @@ private:
 
   std::vector<std::string> path_colors_;
   std::vector<std::string> path_topics_;
+  std::string look_ahead_index_topic_;
   std::vector<std::shared_ptr<rclcpp::Subscription<nav_msgs::msg::Path>>>
       path_subscriptions_;
+  std::vector<nav_msgs::msg::Path::SharedPtr> latest_paths_;
+
+  int64_t look_ahead_index_ = -1;
 
   WbNodeRef inductive_sensor_node;
   std::vector<Point> points = {{-1, -1}, {1, 1}};
