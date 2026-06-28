@@ -106,26 +106,20 @@ class WebotsController(ExecuteProcess):
 
 
 def launch_setup(context, *args, **kwargs):
-    odometry_variables = LaunchConfiguration("odometry_variables").perform(context)
-    gui = LaunchConfiguration("gui").perform(context) == "true"
-
     perse_bringup = get_package_share_directory("perse_bringup")
     perse_webots = get_package_share_directory("perse_webots")
+
+    default_mission_points = os.path.join(perse_bringup, "config", "mission_points.yaml")
+    mission_points = LaunchConfiguration("mission_points").perform(context) or default_mission_points
+    gui = LaunchConfiguration("gui").perform(context) == "true"
 
     topics = os.path.join(perse_bringup, "config", "topics.yaml")
     perse_properties = os.path.join(perse_bringup, "config", "perse_properties.yaml")
     perse_driver_parameters = os.path.join(perse_webots, "config", "perse_driver.yaml")
 
-    if odometry_variables == "":
-        odometry_variables = os.path.join(
-            perse_bringup, "config", "odometry_variables.yaml"
-        )
-
-    package_dir = get_package_share_directory("perse_webots")
-
-    robot_description_path = os.path.join(package_dir, "resource", "perse.urdf")
+    robot_description_path = os.path.join(perse_webots, "resource", "perse.urdf")
     webots = WebotsLauncher(
-        world=os.path.join(package_dir, "resource", "worlds", "circle_arena.wbt"),
+        world=os.path.join(perse_webots, "resource", "worlds", "circle_arena.wbt"),
         gui=gui,
     )
 
@@ -134,7 +128,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[
             {
                 "robot_description": robot_description_path,
-                "odometry_variables": odometry_variables,
+                "mission_points": mission_points,
                 "encoder_constant": 1 / 14,
             },
             perse_driver_parameters,
@@ -193,7 +187,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     declared_arguments = [
-        DeclareLaunchArgument("odometry_variables", default_value=""),
+        DeclareLaunchArgument("mission_points", default_value=""),
         DeclareLaunchArgument("gui", default_value="true"),
     ]
     return LaunchDescription(

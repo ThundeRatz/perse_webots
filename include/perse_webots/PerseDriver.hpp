@@ -38,8 +38,7 @@ struct Point {
 class PerseDriver : public webots_ros2_driver::PluginInterface {
  public:
   void step() override;
-  void init(webots_ros2_driver::WebotsNode* node,
-            std::unordered_map<std::string, std::string>& parameters) override;
+  void init(webots_ros2_driver::WebotsNode* node, std::unordered_map<std::string, std::string>& parameters) override;
 
  private:
   bool preStep();

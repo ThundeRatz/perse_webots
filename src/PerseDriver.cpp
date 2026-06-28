@@ -22,8 +22,7 @@
 
 namespace perse_driver {
 
-void PerseDriver::init(webots_ros2_driver::WebotsNode* node,
-                       std::unordered_map<std::string, std::string>& parameters) {
+void PerseDriver::init(webots_ros2_driver::WebotsNode* node, std::unordered_map<std::string, std::string>& parameters) {
   this->node = node;
 
   path_group_node_ = wb_supervisor_node_get_from_def("PATH_GROUP");
@@ -47,8 +46,7 @@ void PerseDriver::init(webots_ros2_driver::WebotsNode* node,
   wbu_driver_init();
 
   // This parameter is read when loading the URDF file
-  publish_timestep =
-      parameters.count("updateRate") ? 1.0 / atof(parameters["updateRate"].c_str()) : 0;
+  publish_timestep = parameters.count("updateRate") ? 1.0 / atof(parameters["updateRate"].c_str()) : 0;
 
   bumper = wb_robot_get_device("bumper");
   led = wb_robot_get_device("led");
@@ -63,19 +61,14 @@ void PerseDriver::init(webots_ros2_driver::WebotsNode* node,
 }
 
 void PerseDriver::fetchParameters() {
-  max_forward = node->declare_parameter("properties.limits.speed.forward", rclcpp::PARAMETER_DOUBLE)
-                    .get<double>();
-  max_backward =
-      node->declare_parameter("properties.limits.speed.backward", rclcpp::PARAMETER_DOUBLE)
-          .get<double>();
-  max_steer =
-      node->declare_parameter("properties.limits.steer", rclcpp::PARAMETER_DOUBLE).get<double>();
+  max_forward = node->declare_parameter("properties.limits.speed.forward", rclcpp::PARAMETER_DOUBLE).get<double>();
+  max_backward = node->declare_parameter("properties.limits.speed.backward", rclcpp::PARAMETER_DOUBLE).get<double>();
+  max_steer = node->declare_parameter("properties.limits.steer", rclcpp::PARAMETER_DOUBLE).get<double>();
 
-  encoder_constant =
-      node->declare_parameter("encoder_constant", rclcpp::PARAMETER_DOUBLE).get<double>();
+  encoder_constant = node->declare_parameter("encoder_constant", rclcpp::PARAMETER_DOUBLE).get<double>();
 
-  auto odometry_variables = node->declare_parameter("odometry_variables", rclcpp::PARAMETER_STRING);
-  fetchPoints(odometry_variables.get<std::string>());
+  auto mission_points = node->declare_parameter("mission_points", rclcpp::PARAMETER_STRING);
+  fetchPoints(mission_points.get<std::string>());
 
   // NEW: Get path topics to subscribe to
   node->declare_parameter("path_topics", rclcpp::PARAMETER_STRING_ARRAY);
@@ -94,22 +87,19 @@ void PerseDriver::fetchParameters() {
 }
 
 void PerseDriver::setupCallbacks() {
-  cmd_vel_subscription = node->create_subscription<geometry_msgs::msg::Twist>(
-      "/perse/actuator/cmd_vel", rclcpp::SensorDataQoS().reliable(),
-      std::bind(&PerseDriver::cmdVelCallback, this, std::placeholders::_1));
-  led_subscription = node->create_subscription<std_msgs::msg::Bool>(
-      "/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
-      std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
+  cmd_vel_subscription = node->create_subscription<geometry_msgs::msg::Twist>("/perse/actuator/cmd_vel", rclcpp::SensorDataQoS().reliable(),
+                                                                              std::bind(&PerseDriver::cmdVelCallback, this, std::placeholders::_1));
+  led_subscription = node->create_subscription<std_msgs::msg::Bool>("/perse/actuator/led_rod", rclcpp::SensorDataQoS().reliable(),
+                                                                    std::bind(&PerseDriver::ledCallback, this, std::placeholders::_1));
 
   // Subscribe to multiple path topics
   for (size_t i = 0; i < path_topics_.size(); ++i) {
     auto topic = path_topics_[i];
-    auto subscription = node->create_subscription<nav_msgs::msg::Path>(
-        topic, rclcpp::SensorDataQoS().reliable(),
-        [this, i](const nav_msgs::msg::Path::SharedPtr msg) {
-          this->pathCallback(msg, i);
-          RCLCPP_INFO(node->get_logger(), "received path at index: %zu", i);
-        });
+    auto subscription = node->create_subscription<nav_msgs::msg::Path>(topic, rclcpp::SensorDataQoS().reliable(),
+                                                                       [this, i](const nav_msgs::msg::Path::SharedPtr msg) {
+                                                                         this->pathCallback(msg, i);
+                                                                         RCLCPP_INFO(node->get_logger(), "received path at index: %zu", i);
+                                                                       });
     path_subscriptions_.push_back(subscription);
 
     latest_paths_.push_back(nullptr);
@@ -118,20 +108,16 @@ void PerseDriver::setupCallbacks() {
   }
 
   if (!this->look_ahead_index_topic_.empty()) {
-    look_ahead_index_subscription_ = node->create_subscription<std_msgs::msg::Int64>(
-        this->look_ahead_index_topic_, rclcpp::SensorDataQoS().reliable(),
-        std::bind(&PerseDriver::lookAheadIndexCallback, this, std::placeholders::_1));
+    look_ahead_index_subscription_ =
+        node->create_subscription<std_msgs::msg::Int64>(this->look_ahead_index_topic_, rclcpp::SensorDataQoS().reliable(),
+                                                        std::bind(&PerseDriver::lookAheadIndexCallback, this, std::placeholders::_1));
 
-    RCLCPP_INFO(node->get_logger(), "Subscribed to look-ahead index topic: %s",
-                this->look_ahead_index_topic_.c_str());
+    RCLCPP_INFO(node->get_logger(), "Subscribed to look-ahead index topic: %s", this->look_ahead_index_topic_.c_str());
   }
 
-  encoder_pub = node->create_publisher<std_msgs::msg::Float64>(
-      "/perse/sensors/encoder_fusion/distance", rclcpp::SensorDataQoS().reliable());
-  bumper_pub = node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/bumper",
-                                                           rclcpp::SensorDataQoS().reliable());
-  inductive_sensor_pub = node->create_publisher<std_msgs::msg::Bool>(
-      "/perse/sensors/inductive_sensor", rclcpp::SensorDataQoS().reliable());
+  encoder_pub = node->create_publisher<std_msgs::msg::Float64>("/perse/sensors/encoder_fusion/distance", rclcpp::SensorDataQoS().reliable());
+  bumper_pub = node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/bumper", rclcpp::SensorDataQoS().reliable());
+  inductive_sensor_pub = node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/inductive_sensor", rclcpp::SensorDataQoS().reliable());
 
   encoder_msg.data = 0;
   encoder_pub->publish(encoder_msg);
@@ -167,8 +153,7 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg, size_t 
 
   for (size_t i = 0; i < msg->poses.size(); ++i) {
     const auto& pose = msg->poses[i].pose;
-    points_str += std::to_string(pose.position.x) + " " + std::to_string(pose.position.y) + " " +
-                  std::to_string(0.1);
+    points_str += std::to_string(pose.position.x) + " " + std::to_string(pose.position.y) + " " + std::to_string(0.1);
     indices_str += std::to_string(i);
 
     if (i < msg->poses.size() - 1) {
@@ -231,8 +216,7 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg, size_t 
   wb_supervisor_field_import_mf_node_from_string(children_field, path_index, shape_string.c_str());
 
   if (look_ahead_index_ >= 0) {
-    const auto look_ahead_pose_index =
-        std::min<size_t>(static_cast<size_t>(look_ahead_index_), msg->poses.size() - 1);
+    const auto look_ahead_pose_index = std::min<size_t>(static_cast<size_t>(look_ahead_index_), msg->poses.size() - 1);
 
     const auto& pose = msg->poses[look_ahead_pose_index].pose;
     std::stringstream sphere_string;
@@ -250,8 +234,7 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg, size_t 
                   << "  ]\n"
                   << "}";
 
-    WbFieldRef look_ahead_children_field =
-        wb_supervisor_node_get_field(look_ahead_group_node_, "children");
+    WbFieldRef look_ahead_children_field = wb_supervisor_node_get_field(look_ahead_group_node_, "children");
     if (look_ahead_children_field) {
       int look_ahead_field_count = wb_supervisor_field_get_count(look_ahead_children_field);
       while (look_ahead_field_count <= static_cast<int>(path_index)) {
@@ -260,8 +243,7 @@ void PerseDriver::pathCallback(const nav_msgs::msg::Path::SharedPtr msg, size_t 
       }
 
       wb_supervisor_field_remove_mf(look_ahead_children_field, path_index);
-      wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, path_index,
-                                                     sphere_string.str().c_str());
+      wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, path_index, sphere_string.str().c_str());
     }
   }
 }
@@ -277,8 +259,7 @@ void PerseDriver::lookAheadIndexCallback(const std_msgs::msg::Int64::SharedPtr m
     return;
   }
 
-  WbFieldRef look_ahead_children_field =
-      wb_supervisor_node_get_field(look_ahead_group_node_, "children");
+  WbFieldRef look_ahead_children_field = wb_supervisor_node_get_field(look_ahead_group_node_, "children");
   if (!look_ahead_children_field) {
     RCLCPP_ERROR(node->get_logger(), "Could not get 'children' field of LOOK_AHEAD_GROUP.");
     return;
@@ -290,8 +271,7 @@ void PerseDriver::lookAheadIndexCallback(const std_msgs::msg::Int64::SharedPtr m
       continue;
     }
 
-    const auto look_ahead_pose_index =
-        std::min<size_t>(static_cast<size_t>(look_ahead_index_), path->poses.size() - 1);
+    const auto look_ahead_pose_index = std::min<size_t>(static_cast<size_t>(look_ahead_index_), path->poses.size() - 1);
     const auto& pose = path->poses[look_ahead_pose_index].pose;
 
     std::stringstream sphere_string;
@@ -316,8 +296,7 @@ void PerseDriver::lookAheadIndexCallback(const std_msgs::msg::Int64::SharedPtr m
     }
 
     wb_supervisor_field_remove_mf(look_ahead_children_field, path_index);
-    wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, path_index,
-                                                   sphere_string.str().c_str());
+    wb_supervisor_field_import_mf_node_from_string(look_ahead_children_field, path_index, sphere_string.str().c_str());
   }
 }
 
@@ -329,44 +308,25 @@ void PerseDriver::fetchPoints(const std::string yaml_file_path) {
     // Load the YAML file
     YAML::Node config = YAML::LoadFile(yaml_file_path);
 
-    // Access the 'ros__parameters' node
-    if ((config["/decision_node"] && config["/decision_node"]["ros__parameters"]) ||
-        (config["/**"] && config["/**"]["ros__parameters"])) {
-      YAML::Node parameters;
-      if (config["/decision_node"]) {
-        parameters = config["/decision_node"]["ros__parameters"];
-      } else {
-        parameters = config["/**"]["ros__parameters"];
-      }
-
-      // Loop through the points p1, p2, p3, etc.
-      // Start from 1 and continue until a point is not found
+    if (config["points"] && config["points"].IsSequence()) {
       int i = 1;
-      while (true) {
-        std::string point_name = "p" + std::to_string(i);
-        if (parameters[point_name]) {
-          // Get the 'x' and 'y' values
-          double x = parameters[point_name]["x"].as<double>();
-          double y = parameters[point_name]["y"].as<double>();
-          bool hasCone = parameters[point_name]["has_cone"].as<bool>();
+      for (const auto& pt : config["points"]) {
+        double x = pt["x"].as<double>();
+        double y = pt["y"].as<double>();
+        bool hasCone = pt["has_cone"].as<bool>();
 
-          // Create a Point object and add it to the vector
-          points.push_back({x, y, hasCone});
+        // Create a Point object and add it to the vector
+        points.push_back({x, y, hasCone});
 
-          RCLCPP_INFO_STREAM(node->get_logger(), "Read point " << i << ": x=" << x << ", y=" << y);
-          i++;
-        } else {
-          // No more points found, exit the loop
-          break;
-        }
+        RCLCPP_INFO_STREAM(node->get_logger(), "Read point " << i << ": x=" << x << ", y=" << y);
+        i++;
       }
     } else {
-      RCLCPP_ERROR_STREAM(node->get_logger(), "Error: 'ros__parameters' node not found.");
+      RCLCPP_ERROR_STREAM(node->get_logger(), "Error: 'points' sequence not found in YAML file.");
     }
 
   } catch (const YAML::BadFile& e) {
-    RCLCPP_ERROR_STREAM(node->get_logger(),
-                        "Error: Could not open or parse the file: " << e.what());
+    RCLCPP_ERROR_STREAM(node->get_logger(), "Error: Could not open or parse the file: " << e.what());
   } catch (const YAML::Exception& e) {
     RCLCPP_ERROR_STREAM(node->get_logger(), "YAML parsing error: " << e.what());
   }
@@ -387,15 +347,12 @@ void PerseDriver::spawnCones() {
 
     def_string << "CONE" << i;
 
-    node_string << "DEF " << def_string.str() << " ConePlate { name \"plate" << i
-                << "\"\ntranslation " << point.x << " " << point.y << " 0.0 }";
+    node_string << "DEF " << def_string.str() << " ConePlate { name \"plate" << i << "\"\ntranslation " << point.x << " " << point.y << " 0.0 }";
 
     if (point.hasCone) {
-      node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone" << i
-                  << "\"\ntranslation " << point.x << " " << point.y << " 0.12 }";
+      node_string << "TrafficCone { physics Physics { mass 1 }\n name \"cone" << i << "\"\ntranslation " << point.x << " " << point.y << " 0.12 }";
     }
-    wb_supervisor_field_import_mf_node_from_string(root_children_field, -1,
-                                                   node_string.str().c_str());
+    wb_supervisor_field_import_mf_node_from_string(root_children_field, -1, node_string.str().c_str());
 
     WbNodeRef coneNode = wb_supervisor_node_get_from_def(def_string.str().c_str());
     if (coneNode != NULL) {
@@ -417,8 +374,7 @@ void PerseDriver::step() {
 
   auto command_steer_angle = steer_angle * sgn(-velocity_pwm);
 
-  wbu_driver_set_cruising_speed(velocity_pwm >= 0 ? velocity_pwm * max_forward * 3.6
-                                                  : velocity_pwm * max_backward * 3.6);
+  wbu_driver_set_cruising_speed(velocity_pwm >= 0 ? velocity_pwm * max_forward * 3.6 : velocity_pwm * max_backward * 3.6);
 
   // wbu_driver_set_gear(velocity_pwm >= 0 ? 1 : -1);
   // wbu_driver_set_throttle(std::abs(velocity_pwm));
@@ -430,8 +386,7 @@ void PerseDriver::step() {
 
   if (std::abs(encoder_reading - last_encoder_reading) >= ENCODER_RESOLUTION) {
     std_msgs::msg::Float64 encoder_msg;
-    encoder_msg.data =
-        std::ceil(encoder_reading * (1 / ENCODER_RESOLUTION)) / (1 / ENCODER_RESOLUTION);
+    encoder_msg.data = std::ceil(encoder_reading * (1 / ENCODER_RESOLUTION)) / (1 / ENCODER_RESOLUTION);
     encoder_pub->publish(encoder_msg);
     last_encoder_reading = encoder_msg.data;
   }
@@ -455,8 +410,7 @@ void PerseDriver::step() {
   for (auto cone_node : coneNodes) {
     const double* cone_position = wb_supervisor_node_get_position(cone_node);
 
-    if (std::abs(position[0] - cone_position[0]) < PLATE_SIZE / 2 &&
-        std::abs(position[1] - cone_position[1]) < PLATE_SIZE / 2) {
+    if (std::abs(position[0] - cone_position[0]) < PLATE_SIZE / 2 && std::abs(position[1] - cone_position[1]) < PLATE_SIZE / 2) {
       inductive_sensor_reading = true;
       break;
     }
