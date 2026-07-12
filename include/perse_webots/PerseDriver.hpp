@@ -8,6 +8,7 @@
 #include "webots_ros2_driver/WebotsNode.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/imu.hpp"
@@ -96,6 +97,9 @@ class PerseDriver : public webots_ros2_driver::PluginInterface {
   WbNodeRef inductive_sensor_node;
   std::vector<Point> points = {{-1, -1}, {1, 1}};
   std::vector<WbNodeRef> coneNodes;
+
+  WbNodeRef perse_node_;
+  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_gt_pub;
 
   webots_ros2_driver::WebotsNode* node;
 };

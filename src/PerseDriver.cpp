@@ -22,6 +22,35 @@
 
 namespace perse_driver {
 
+static void matrixToQuaternion(const double R[9], double q[4]) {
+  double tr = R[0] + R[4] + R[8];
+  if (tr > 0) {
+    double S = sqrt(tr + 1.0) * 2;  // S=4*qw
+    q[3] = 0.25 * S;
+    q[0] = (R[7] - R[5]) / S;
+    q[1] = (R[2] - R[6]) / S;
+    q[2] = (R[3] - R[1]) / S;
+  } else if ((R[0] > R[4]) && (R[0] > R[8])) {
+    double S = sqrt(1.0 + R[0] - R[4] - R[8]) * 2;  // S=4*qx
+    q[3] = (R[7] - R[5]) / S;
+    q[0] = 0.25 * S;
+    q[1] = (R[1] + R[3]) / S;
+    q[2] = (R[2] + R[6]) / S;
+  } else if (R[4] > R[8]) {
+    double S = sqrt(1.0 + R[4] - R[0] - R[8]) * 2;  // S=4*qy
+    q[3] = (R[2] - R[6]) / S;
+    q[0] = (R[1] + R[3]) / S;
+    q[1] = 0.25 * S;
+    q[2] = (R[5] + R[7]) / S;
+  } else {
+    double S = sqrt(1.0 + R[8] - R[0] - R[4]) * 2;  // S=4*qz
+    q[3] = (R[3] - R[1]) / S;
+    q[0] = (R[2] + R[6]) / S;
+    q[1] = (R[5] + R[7]) / S;
+    q[2] = 0.25 * S;
+  }
+}
+
 void PerseDriver::init(webots_ros2_driver::WebotsNode* node, std::unordered_map<std::string, std::string>& parameters) {
   this->node = node;
 
@@ -53,9 +82,9 @@ void PerseDriver::init(webots_ros2_driver::WebotsNode* node, std::unordered_map<
 
   wb_touch_sensor_enable(bumper, publish_timestep * 1000);
 
-  WbNodeRef perse_node = wb_supervisor_node_get_from_def("PERSE");
+  perse_node_ = wb_supervisor_node_get_from_def("PERSE");
 
-  inductive_sensor_node = wb_supervisor_node_get_from_proto_def(perse_node, "INDUCTIVE_SENSOR");
+  inductive_sensor_node = wb_supervisor_node_get_from_proto_def(perse_node_, "INDUCTIVE_SENSOR");
 
   spawnCones();
 }
@@ -118,6 +147,7 @@ void PerseDriver::setupCallbacks() {
   encoder_pub = node->create_publisher<std_msgs::msg::Float64>("/perse/sensors/encoder_fusion/distance", rclcpp::SensorDataQoS().reliable());
   bumper_pub = node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/bumper", rclcpp::SensorDataQoS().reliable());
   inductive_sensor_pub = node->create_publisher<std_msgs::msg::Bool>("/perse/sensors/inductive_sensor", rclcpp::SensorDataQoS().reliable());
+  odom_gt_pub = node->create_publisher<nav_msgs::msg::Odometry>("/perse/simulation/odom_gt", rclcpp::SensorDataQoS().reliable());
 
   encoder_msg.data = 0;
   encoder_pub->publish(encoder_msg);
@@ -421,6 +451,43 @@ void PerseDriver::step() {
     inductive_sensor_pub->publish(inductive_sensor_msg);
   } else {
     inductive_sensor_msg.data = inductive_sensor_reading;
+  }
+
+  // Publish ground truth odometry
+  if (perse_node_) {
+    const double* pos = wb_supervisor_node_get_position(perse_node_);
+    const double* rot_matrix = wb_supervisor_node_get_orientation(perse_node_);
+    if (pos && rot_matrix) {
+      double q[4];
+      matrixToQuaternion(rot_matrix, q);
+
+      nav_msgs::msg::Odometry odom_msg;
+      odom_msg.header.stamp = node->get_clock()->now();
+      odom_msg.header.frame_id = "odom";
+      odom_msg.child_frame_id = "base_link";
+
+      odom_msg.pose.pose.position.x = pos[0];
+      odom_msg.pose.pose.position.y = pos[1];
+      odom_msg.pose.pose.position.z = pos[2];
+
+      odom_msg.pose.pose.orientation.x = q[0];
+      odom_msg.pose.pose.orientation.y = q[1];
+      odom_msg.pose.pose.orientation.z = q[2];
+      odom_msg.pose.pose.orientation.w = q[3];
+
+      // Get velocity if available
+      const double* velocity = wb_supervisor_node_get_velocity(perse_node_);
+      if (velocity) {
+        odom_msg.twist.twist.linear.x = velocity[0];
+        odom_msg.twist.twist.linear.y = velocity[1];
+        odom_msg.twist.twist.linear.z = velocity[2];
+        odom_msg.twist.twist.angular.x = velocity[3];
+        odom_msg.twist.twist.angular.y = velocity[4];
+        odom_msg.twist.twist.angular.z = velocity[5];
+      }
+
+      odom_gt_pub->publish(odom_msg);
+    }
   }
 }
 
