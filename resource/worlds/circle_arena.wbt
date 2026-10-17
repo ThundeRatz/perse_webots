@@ -49,6 +49,9 @@ CircleArena {
 }
 DEF PATH_GROUP Group {
 }
+DEF LOOK_AHEAD_GROUP Group {
+}
 DEF PERSE Perse {
-  translation_offset   0.1285 0.1285 0.2
+  # translation_offset   0.1285 0.1285 0.2
+  translation_offset   0.0 0.0 0.2
 }
